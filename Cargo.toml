@@ -1,0 +1,8 @@
+[package]
+name = "rust-simd"
+version = "0.1.0"
+authors = ["eduidl <ayzgnm5k8y@gmail.com>"]
+
+[dependencies]
+rand = "0.5.5"
+packed_simd = "0.1.0"
