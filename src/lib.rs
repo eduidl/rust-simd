@@ -7,7 +7,8 @@ extern crate packed_simd;
 use std::ops::{Add, Shl};
 use std::convert::From;
 use rand::{Rng, StdRng, SeedableRng};
-use rand::distributions::{Standard, Distribution};
+use rand::distributions::{Uniform, Standard, Distribution};
+use rand::distributions::uniform::SampleUniform;
 use packed_simd::*;
 
 fn add<T>(a: &[T], b: &[T], c: &mut [T])
@@ -156,9 +157,17 @@ unsafe fn unsafe_simd_census(src: &[f32], dst: &mut [u64],
     }
 }
 
-fn init_vec<R: Rng, T>(rng: &mut R, size: usize) -> Vec<T>
-    where Standard: Distribution<T> {
-    rng.sample_iter(&Standard).take(size).collect()
+fn init_vec<R: Rng, T>(rng: &mut R, size: usize, min_max: Option<(T, T)>) -> Vec<T>
+    where T: SampleUniform,
+          Standard: Distribution<T> {
+    match min_max {
+        Some((min, max)) => {
+            assert!(min < max);
+            let between = Uniform::from(min..max);
+            rng.sample_iter(&between).take(size).collect()
+        },
+        None => rng.sample_iter(&Standard).take(size).collect()
+    }
 }
 
 #[cfg(test)]
@@ -171,94 +180,176 @@ mod tests {
         SeedableRng::from_seed(seed)
     }
     
+    const ADD_SIZE: usize = 100_000;
+    const RANGE_FOR_ADD: (u32, u32) = (0, std::u32::MAX / 10);
+    
     #[bench]
     fn bench_add(bm: &mut Bencher) {
         let mut rng = rng();
-        let size = 100_000;
 
-        let a = init_vec(&mut rng, size);
-        let b = init_vec(&mut rng, size);
-        let mut c = vec![0u32; size];
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
         bm.iter(|| add(&a, &b, &mut c));
+    }
+
+    #[test]
+    fn test_simd_add_aligned() {
+        let mut rng = rng();
+
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
+        let mut d = vec![0u32; ADD_SIZE];
+        add(&a, &b, &mut c);
+        simd_add_aligned(&a, &b, &mut d);
+        for (c, d) in c.iter().zip(d) {
+            assert_eq!(*c, d);
+        }
     }
 
     #[bench]
     fn bench_simd_add_aligned(bm: &mut Bencher) {
         let mut rng = rng();
-        let size = 100_000;
 
-        let a = init_vec(&mut rng, size);
-        let b = init_vec(&mut rng, size);
-        let mut c = vec![0u32; size];
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
         bm.iter(|| simd_add_aligned(&a, &b, &mut c));
+    }
+    
+    #[test]
+    fn test_simd_add_unaligned() {
+        let mut rng = rng();
+
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
+        let mut d = vec![0u32; ADD_SIZE];
+        add(&a, &b, &mut c);
+        simd_add_unaligned(&a, &b, &mut d);
+        for (c, d) in c.iter().zip(d) {
+            assert_eq!(*c, d);
+        }
     }
 
     #[bench]
     fn bench_simd_add_unaligned(bm: &mut Bencher) {
         let mut rng = rng();
-        let size = 100_000;
 
-        let a = init_vec(&mut rng, size);
-        let b = init_vec(&mut rng, size);
-        let mut c = vec![0u32; size];
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
         bm.iter(|| simd_add_unaligned(&a, &b, &mut c));
+    }
+    
+    #[test]
+    fn test_unsafe_simd_add_aligned() {
+        let mut rng = rng();
+
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
+        let mut d = vec![0u32; ADD_SIZE];
+        add(&a, &b, &mut c);
+        unsafe { unsafe_simd_add_aligned(&a, &b, &mut d); }
+        for (c, d) in c.iter().zip(d) {
+            assert_eq!(*c, d);
+        }
     }
 
     #[bench]
     fn bench_unsafe_simd_add_aligned(bm: &mut Bencher) {
         let mut rng = rng();
-        let size = 100_000;
 
-        let a = init_vec(&mut rng, size);
-        let b = init_vec(&mut rng, size);
-        let mut c = vec![0u32; size];
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
         bm.iter(|| unsafe { unsafe_simd_add_aligned(&a, &b, &mut c) });
+    }
+    
+    #[test]
+    fn test_unsafe_simd_add_unaligned() {
+        let mut rng = rng();
+
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
+        let mut d = vec![0u32; ADD_SIZE];
+        add(&a, &b, &mut c);
+        unsafe { unsafe_simd_add_unaligned(&a, &b, &mut d); }
+        for (c, d) in c.iter().zip(d) {
+            assert_eq!(*c, d);
+        }
     }
 
     #[bench]
     fn bench_unsafe_simd_add_unaligned(bm: &mut Bencher) {
         let mut rng = rng();
-        let size = 100_000;
 
-        let a = init_vec(&mut rng, size);
-        let b = init_vec(&mut rng, size);
-        let mut c = vec![0u32; size];
+        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
+        let mut c = vec![0u32; ADD_SIZE];
         bm.iter(|| unsafe { unsafe_simd_add_unaligned(&a, &b, &mut c) });
     }
+    
+    const WIDTH:  isize = 1024;
+    const HEIGHT: isize = 360;
+    const CENSUS_SIZE: usize = (WIDTH * HEIGHT) as usize;
 
     #[bench]
     fn bench_census(bm: &mut Bencher) {
         let mut rng = rng();
-        let width = 1024;
-        let height = 360;
-        let size = (width * height) as usize;
 
-        let src = init_vec::<_, f32>(&mut rng, size);
-        let mut dst = vec![0u64; size];
-        bm.iter(|| census(&src, &mut dst, width, height, 9, 7));
+        let src = init_vec::<_, f32>(&mut rng, CENSUS_SIZE, None);
+        let mut dst = vec![0u64; CENSUS_SIZE];
+        bm.iter(|| census(&src, &mut dst, WIDTH, HEIGHT, 9, 7));
     }
+    
+    #[test]
+    fn test_census_simd() {
+        let mut rng = rng();
+
+        let src = init_vec::<_, f32>(&mut rng, CENSUS_SIZE, None);
+        let mut dst1 = vec![0u64; CENSUS_SIZE];
+        let mut dst2 = vec![0u64; CENSUS_SIZE];
+        census(&src, &mut dst1, WIDTH, HEIGHT, 9, 7);
+        simd_census(&src, &mut dst2, WIDTH, HEIGHT, 9, 7);
+        for (dst1, dst2) in dst1.iter().zip(dst2) {
+            assert_eq!(*dst1, dst2);
+        }
+    }
+
 
     #[bench]
     fn bench_simd_census(bm: &mut Bencher) {
         let mut rng = rng();
-        let width = 1024;
-        let height = 360;
-        let size = (width * height) as usize;
 
-        let src = init_vec::<_, f32>(&mut rng, size);
-        let mut dst = vec![0u64; size];
-        bm.iter(|| simd_census(&src, &mut dst, width, height, 9, 7));
+        let src = init_vec::<_, f32>(&mut rng, CENSUS_SIZE, None);
+        let mut dst = vec![0u64; CENSUS_SIZE];
+        bm.iter(|| simd_census(&src, &mut dst, WIDTH, HEIGHT, 9, 7));
+    }
+    
+       #[test]
+    fn test_unsafe_census_simd() {
+        let mut rng = rng();
+
+        let src = init_vec::<_, f32>(&mut rng, CENSUS_SIZE, None);
+        let mut dst1 = vec![0u64; CENSUS_SIZE];
+        let mut dst2 = vec![0u64; CENSUS_SIZE];
+        census(&src, &mut dst1, WIDTH, HEIGHT, 9, 7);
+        unsafe { unsafe_simd_census(&src, &mut dst2, WIDTH, HEIGHT, 9, 7); }
+        for (dst1, dst2) in dst1.iter().zip(dst2) {
+            assert_eq!(*dst1, dst2);
+        }
     }
 
     #[bench]
     fn bench_unsafe_simd_census(bm: &mut Bencher) {
         let mut rng = rng();
-        let width = 1024;
-        let height = 360;
-        let size = (width * height) as usize;
 
-        let src = init_vec::<_, f32>(&mut rng, size);
-        let mut dst = vec![0u64; size];
-        bm.iter(|| unsafe { unsafe_simd_census(&src, &mut dst, width, height, 9, 7) });
+        let src = init_vec::<_, f32>(&mut rng, CENSUS_SIZE, None);
+        let mut dst = vec![0u64; CENSUS_SIZE];
+        bm.iter(|| unsafe { unsafe_simd_census(&src, &mut dst, WIDTH, HEIGHT, 9, 7) });
     }
 }
