@@ -5,6 +5,7 @@ extern crate rand;
 extern crate packed_simd;
 
 use std::ops::{Add, Shl};
+use std::cmp::PartialOrd;
 use std::convert::From;
 use rand::{Rng, StdRng, SeedableRng};
 use rand::distributions::{Uniform, Standard, Distribution};
@@ -18,18 +19,6 @@ fn add<T>(a: &[T], b: &[T], c: &mut [T])
     }
 }
 
-fn simd_add_aligned(a: &[u32], b: &[u32], c: &mut [u32]) {
-    assert_eq!(a.len(), b.len());
-    assert_eq!(a.len(), c.len());
-    assert!(a.len() % 16 == 0);
-    for i in (0..a.len()).step_by(16) {
-        let aa = u32x16::from_slice_aligned(&a[i..]);
-        let bb = u32x16::from_slice_aligned(&b[i..]);
-        let cc = aa + bb;
-        cc.write_to_slice_aligned(&mut c[i..]);
-    }
-}
-
 fn simd_add_unaligned(a: &[u32], b: &[u32], c: &mut [u32]) {
     assert_eq!(a.len(), b.len());
     assert_eq!(a.len(), c.len());
@@ -39,18 +28,6 @@ fn simd_add_unaligned(a: &[u32], b: &[u32], c: &mut [u32]) {
         let bb = u32x16::from_slice_unaligned(&b[i..]);
         let cc = aa + bb;
         cc.write_to_slice_unaligned(&mut c[i..]);
-    }
-}
-
-unsafe fn unsafe_simd_add_aligned(a: &[u32], b: &[u32], c: &mut [u32]) {
-    assert_eq!(a.len(), b.len());
-    assert_eq!(a.len(), c.len());
-    assert!(a.len() % 16 == 0);
-    for i in (0..a.len()).step_by(16) {
-        let aa = u32x16::from_slice_aligned_unchecked(&a[i..]);
-        let bb = u32x16::from_slice_aligned_unchecked(&b[i..]);
-        let cc = aa + bb;
-        cc.write_to_slice_aligned_unchecked(&mut c[i..]);
     }
 }
 
@@ -158,7 +135,7 @@ unsafe fn unsafe_simd_census(src: &[f32], dst: &mut [u64],
 }
 
 fn init_vec<R: Rng, T>(rng: &mut R, size: usize, min_max: Option<(T, T)>) -> Vec<T>
-    where T: SampleUniform,
+    where T: SampleUniform + PartialOrd,
           Standard: Distribution<T> {
     match min_max {
         Some((min, max)) => {
@@ -194,31 +171,6 @@ mod tests {
     }
 
     #[test]
-    fn test_simd_add_aligned() {
-        let mut rng = rng();
-
-        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let mut c = vec![0u32; ADD_SIZE];
-        let mut d = vec![0u32; ADD_SIZE];
-        add(&a, &b, &mut c);
-        simd_add_aligned(&a, &b, &mut d);
-        for (c, d) in c.iter().zip(d) {
-            assert_eq!(*c, d);
-        }
-    }
-
-    #[bench]
-    fn bench_simd_add_aligned(bm: &mut Bencher) {
-        let mut rng = rng();
-
-        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let mut c = vec![0u32; ADD_SIZE];
-        bm.iter(|| simd_add_aligned(&a, &b, &mut c));
-    }
-    
-    #[test]
     fn test_simd_add_unaligned() {
         let mut rng = rng();
 
@@ -241,31 +193,6 @@ mod tests {
         let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
         let mut c = vec![0u32; ADD_SIZE];
         bm.iter(|| simd_add_unaligned(&a, &b, &mut c));
-    }
-    
-    #[test]
-    fn test_unsafe_simd_add_aligned() {
-        let mut rng = rng();
-
-        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let mut c = vec![0u32; ADD_SIZE];
-        let mut d = vec![0u32; ADD_SIZE];
-        add(&a, &b, &mut c);
-        unsafe { unsafe_simd_add_aligned(&a, &b, &mut d); }
-        for (c, d) in c.iter().zip(d) {
-            assert_eq!(*c, d);
-        }
-    }
-
-    #[bench]
-    fn bench_unsafe_simd_add_aligned(bm: &mut Bencher) {
-        let mut rng = rng();
-
-        let a = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let b = init_vec(&mut rng, ADD_SIZE, Some(RANGE_FOR_ADD));
-        let mut c = vec![0u32; ADD_SIZE];
-        bm.iter(|| unsafe { unsafe_simd_add_aligned(&a, &b, &mut c) });
     }
     
     #[test]
