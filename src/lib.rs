@@ -257,7 +257,7 @@ mod tests {
         bm.iter(|| simd_census(&src, &mut dst, WIDTH, HEIGHT, 9, 7));
     }
     
-       #[test]
+    #[test]
     fn test_unsafe_census_simd() {
         let mut rng = rng();
 
