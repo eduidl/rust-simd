@@ -7,7 +7,7 @@
 ## Requirements
 
 To use packed\_simd, nightly Rust is required.  
-Please check the details at https://github.com/rust-lang-nursery/packed\_simd. 
+Please check the details at https://github.com/rust-lang-nursery/packed_simd. 
 
 ## Run
 
