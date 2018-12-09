@@ -13,7 +13,7 @@ Please check the details at https://github.com/rust-lang-nursery/packed_simd.
 
 ```sh
 # test
-rustup run nightly cargo test
+cargo +nightly test
 # benchmark
-rustup run nightly cargo bench
+cargo +nightly bench 
 ```
